@@ -7,8 +7,6 @@ from src.evaluation.metrics import (
     confusion_matrix,
     per_class_iou,
 )
-from src.evaluation.evaluator import Evaluator, plot_loss_curves, plot_metrics_curves
-from src.evaluation.ablation import AblationRunner
 
 __all__ = [
     "mean_iou",
@@ -16,8 +14,16 @@ __all__ = [
     "dice_coefficient",
     "confusion_matrix",
     "per_class_iou",
-    "Evaluator",
-    "plot_loss_curves",
-    "plot_metrics_curves",
-    "AblationRunner",
 ]
+
+
+def get_evaluator():
+    """Lazy import of Evaluator to avoid circular imports."""
+    from src.evaluation.evaluator import Evaluator
+    return Evaluator
+
+
+def get_ablation_runner():
+    """Lazy import of AblationRunner to avoid circular imports."""
+    from src.evaluation.ablation import AblationRunner
+    return AblationRunner
