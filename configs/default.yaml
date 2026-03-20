@@ -1,0 +1,91 @@
+# =============================================================================
+# Image Segmentation Pipeline - Default Configuration
+# =============================================================================
+
+model:
+  name: "unet"                    # "unet" or "deeplabv3"
+  num_classes: 21                 # Number of segmentation classes (VOC=21)
+  pretrained: true                # Use ImageNet pretrained backbone
+
+dataset:
+  root: "data"
+  image_dir: "images"
+  mask_dir: "masks"
+  image_size: 256
+  num_workers: 4
+  synthetic:
+    enabled: true                 # Generate synthetic data for demo
+    num_samples: 500
+    num_classes: 21
+
+augmentation:
+  pipeline: "full"                # "none", "basic", "full", "mixup"
+  random_crop:
+    enabled: true
+    size: 224
+  color_jitter:
+    enabled: true
+    brightness: 0.3
+    contrast: 0.3
+    saturation: 0.3
+    hue: 0.1
+  horizontal_flip:
+    enabled: true
+    p: 0.5
+  vertical_flip:
+    enabled: true
+    p: 0.3
+  mixup:
+    enabled: false
+    alpha: 0.4
+
+training:
+  epochs: 50
+  batch_size: 8
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: "adam"               # "adam" or "sgd"
+  scheduler:
+    name: "cosine"                # "cosine", "step", "plateau"
+    T_max: 50
+    eta_min: 0.00001
+  loss: "cross_entropy"           # "cross_entropy" or "dice"
+  early_stopping:
+    enabled: true
+    patience: 10
+    min_delta: 0.001
+  gradient_clip: 1.0
+
+transfer_learning:
+  freeze_backbone: true
+  unfreeze_epoch: 5               # Epoch to start unfreezing
+  staged_unfreeze: true           # Gradually unfreeze layers
+
+checkpoint:
+  save_dir: "experiments/checkpoints"
+  save_best: true
+  save_every: 5                   # Save every N epochs
+  resume: null                    # Path to checkpoint to resume from
+
+logging:
+  log_dir: "experiments/logs"
+  tensorboard: true
+  log_every: 10                   # Log every N batches
+  level: "INFO"
+
+evaluation:
+  metrics: ["miou", "pixel_accuracy", "dice"]
+  visualization:
+    enabled: true
+    save_dir: "experiments/visualizations"
+    num_samples: 10
+
+cross_validation:
+  enabled: false
+  k_folds: 5
+
+postprocessing:
+  small_region_threshold: 100     # Remove regions smaller than this
+  morphology:
+    kernel_size: 5
+    operations: ["opening", "closing"]

@@ -1,0 +1,25 @@
+# =============================================================================
+# Ablation Study: Augmentation Comparison
+# =============================================================================
+
+ablation:
+  type: "augmentation"
+  base_config: "configs/default.yaml"
+  experiments:
+    - name: "no_augmentation"
+      augmentation:
+        pipeline: "none"
+    - name: "basic_augmentation"
+      augmentation:
+        pipeline: "basic"
+    - name: "full_augmentation"
+      augmentation:
+        pipeline: "full"
+    - name: "mixup_augmentation"
+      augmentation:
+        pipeline: "mixup"
+
+  output_dir: "experiments/ablation_augmentation"
+  training:
+    epochs: 30
+    batch_size: 8

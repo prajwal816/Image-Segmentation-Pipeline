@@ -1,0 +1,29 @@
+# =============================================================================
+# Ablation Study: Model Comparison
+# =============================================================================
+
+ablation:
+  type: "model"
+  base_config: "configs/default.yaml"
+  experiments:
+    - name: "unet_pretrained"
+      model:
+        name: "unet"
+        pretrained: true
+    - name: "unet_scratch"
+      model:
+        name: "unet"
+        pretrained: false
+    - name: "deeplabv3_pretrained"
+      model:
+        name: "deeplabv3"
+        pretrained: true
+    - name: "deeplabv3_scratch"
+      model:
+        name: "deeplabv3"
+        pretrained: false
+
+  output_dir: "experiments/ablation_models"
+  training:
+    epochs: 30
+    batch_size: 8
