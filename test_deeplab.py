@@ -1,18 +1,16 @@
-import traceback
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import torch
-from src.models.deeplabv3 import DeepLabV3
+import traceback
+import torchvision.models.segmentation as seg
 
-m = DeepLabV3(21, pretrained=False)
+m = seg.deeplabv3_resnet101(weights=None, num_classes=21)
+x = torch.randn(1, 3, 256, 256)
 
-# Try different input sizes
-for size in [256, 512, 224]:
-    try:
-        o = m(torch.randn(1, 3, size, size))
-        print(f"Size {size}: OK -> {o.shape}")
-    except Exception as e:
-        print(f"Size {size}: FAILED -> {e}")
-        if size == 256:
-            traceback.print_exc()
+try:
+    o = m(x)
+    print("OK:", o["out"].shape)
+except Exception as e:
+    tb = traceback.format_exc()
+    with open("error.txt", "w") as f:
+        f.write(tb)
+    print("Error written to error.txt")
+    print("Error:", type(e).__name__, str(e)[:200])
