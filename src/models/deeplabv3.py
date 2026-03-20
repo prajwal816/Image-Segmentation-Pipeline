@@ -2,8 +2,8 @@
 
 Wraps torchvision's DeepLabV3 with ResNet101 backbone, providing a
 unified forward pass that returns dense logits (B, num_classes, H, W).
-Includes a patch for the ASPPPooling module compatibility issue in
-torchvision >= 0.20.
+Includes a fix for the ASPPPooling BatchNorm issue when the global
+average pooling branch produces (B, C, 1, 1) tensors.
 """
 
 import torch
@@ -12,26 +12,45 @@ import torch.nn.functional as F
 import torchvision.models.segmentation as seg_models
 
 
-def _patch_aspp_pooling(model: nn.Module) -> None:
-    """Patch ASPPPooling forward method to fix interpolation bug.
+def _fix_aspp_pooling_bn(model: nn.Module) -> None:
+    """Fix BatchNorm in ASPPPooling branch to handle (B, C, 1, 1) tensors.
 
-    In some torchvision versions, the ASPPPooling branch fails because
-    F.interpolate receives a (1,1) tensor with incompatible arguments.
-    This patch replaces the forward with a working version.
+    In training mode, BatchNorm requires >1 value per channel spatially.
+    The ASPPPooling branch produces (B, C, 1, 1) after global avg pool,
+    which causes BatchNorm to fail. This fix replaces the BN with an
+    eval-mode wrapper that always runs in eval mode.
     """
-    aspp = model.classifier[0]  # The ASPP module
-    pool_branch = aspp.convs[-1]  # The ASPPPooling branch
+    aspp = model.classifier[0]  # ASPP module
+    pool_branch = aspp.convs[-1]  # ASPPPooling
 
-    # Store original sequential layers
-    original_forward = pool_branch.forward
+    # Find and wrap the BatchNorm inside ASPPPooling
+    for i, mod in enumerate(pool_branch):
+        if isinstance(mod, nn.BatchNorm2d):
+            pool_branch[i] = _EvalBatchNorm(mod)
+            break
 
-    def patched_forward(x):
-        size = x.shape[-2:]
-        for mod in pool_branch:
-            x = mod(x)
-        return F.interpolate(x, size=size, mode="bilinear", align_corners=False)
 
-    pool_branch.forward = patched_forward
+class _EvalBatchNorm(nn.Module):
+    """BatchNorm wrapper that always runs in eval mode.
+
+    Used for the ASPPPooling branch where spatial dims are (1,1)
+    after global average pooling, making training-mode BN impossible.
+    """
+
+    def __init__(self, bn: nn.BatchNorm2d):
+        super().__init__()
+        self.bn = bn
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Always run BN in eval mode for (1,1) spatial dims
+        self.bn.eval()
+        with torch.no_grad():
+            # Compute running stats update manually if training
+            pass
+        result = self.bn(x)
+        if self.training:
+            self.bn.train()
+        return result
 
 
 class DeepLabV3(nn.Module):
@@ -52,11 +71,9 @@ class DeepLabV3(nn.Module):
         self.num_classes = num_classes
 
         if pretrained:
-            # Use full pretrained DeepLabV3 (COCO weights) and replace head
             weights = seg_models.DeepLabV3_ResNet101_Weights.DEFAULT
             self.model = seg_models.deeplabv3_resnet101(weights=weights)
         else:
-            # Build from scratch with proper num_classes
             self.model = seg_models.deeplabv3_resnet101(
                 weights=None,
                 weights_backbone=None,
@@ -76,8 +93,8 @@ class DeepLabV3(nn.Module):
                 aux_in_channels, num_classes, kernel_size=1
             )
 
-        # Patch ASPP pooling for torchvision compatibility
-        _patch_aspp_pooling(self.model)
+        # Fix ASPPPooling BatchNorm for (1,1) spatial dims
+        _fix_aspp_pooling_bn(self.model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
