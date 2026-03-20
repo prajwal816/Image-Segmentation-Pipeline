@@ -1,0 +1,40 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Experiments & outputs
+experiments/checkpoints/
+experiments/logs/
+experiments/visualizations/
+experiments/ablation_*/
+
+# Data
+data/images/
+data/masks/
+
+# C++ build
+cpp/opencv_postprocessing/build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Distribution
+dist/
+build/
+*.egg-info/
