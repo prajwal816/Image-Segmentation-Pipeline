@@ -2,15 +2,36 @@
 
 Wraps torchvision's DeepLabV3 with ResNet101 backbone, providing a
 unified forward pass that returns dense logits (B, num_classes, H, W).
-Handles pretrained and scratch initialization with proper head setup.
+Includes a patch for the ASPPPooling module compatibility issue in
+torchvision >= 0.20.
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models.segmentation as seg_models
-from torchvision.models.segmentation.deeplabv3 import DeepLabHead
-from torchvision.models import resnet101, ResNet101_Weights
+
+
+def _patch_aspp_pooling(model: nn.Module) -> None:
+    """Patch ASPPPooling forward method to fix interpolation bug.
+
+    In some torchvision versions, the ASPPPooling branch fails because
+    F.interpolate receives a (1,1) tensor with incompatible arguments.
+    This patch replaces the forward with a working version.
+    """
+    aspp = model.classifier[0]  # The ASPP module
+    pool_branch = aspp.convs[-1]  # The ASPPPooling branch
+
+    # Store original sequential layers
+    original_forward = pool_branch.forward
+
+    def patched_forward(x):
+        size = x.shape[-2:]
+        for mod in pool_branch:
+            x = mod(x)
+        return F.interpolate(x, size=size, mode="bilinear", align_corners=False)
+
+    pool_branch.forward = patched_forward
 
 
 class DeepLabV3(nn.Module):
@@ -34,17 +55,6 @@ class DeepLabV3(nn.Module):
             # Use full pretrained DeepLabV3 (COCO weights) and replace head
             weights = seg_models.DeepLabV3_ResNet101_Weights.DEFAULT
             self.model = seg_models.deeplabv3_resnet101(weights=weights)
-            # Replace classifier head for custom number of classes
-            self.model.classifier = DeepLabHead(2048, num_classes)
-            # Replace auxiliary classifier if present
-            if self.model.aux_classifier is not None:
-                self.model.aux_classifier = nn.Sequential(
-                    nn.Conv2d(1024, 256, kernel_size=3, padding=1, bias=False),
-                    nn.BatchNorm2d(256),
-                    nn.ReLU(inplace=True),
-                    nn.Dropout(0.1),
-                    nn.Conv2d(256, num_classes, kernel_size=1),
-                )
         else:
             # Build from scratch with proper num_classes
             self.model = seg_models.deeplabv3_resnet101(
@@ -52,6 +62,22 @@ class DeepLabV3(nn.Module):
                 weights_backbone=None,
                 num_classes=num_classes,
             )
+
+        # Replace classifier's final conv for custom num_classes
+        in_channels = self.model.classifier[4].in_channels
+        self.model.classifier[4] = nn.Conv2d(
+            in_channels, num_classes, kernel_size=1
+        )
+
+        # Replace auxiliary classifier if present
+        if self.model.aux_classifier is not None:
+            aux_in_channels = self.model.aux_classifier[4].in_channels
+            self.model.aux_classifier[4] = nn.Conv2d(
+                aux_in_channels, num_classes, kernel_size=1
+            )
+
+        # Patch ASPP pooling for torchvision compatibility
+        _patch_aspp_pooling(self.model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
